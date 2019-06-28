@@ -1,0 +1,107 @@
+---
+title: "REPLACE ME"
+output:
+    html_document:
+    df_print: paged
+theme: sandstone
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggbeeswarm)
+source(here::here("code/lib.R"))
+theme_set(theme_bw())
+```
+
+```{r read}
+atividade = read_projectdata()
+```
+
+```{r}
+
+atividade %>% 
+  filter(!is.na(engaj_total), engaj_total != 0) %>%
+  ggplot(aes(x = casa, y = engaj_total)) +
+  geom_quasirandom() +
+  scale_y_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_total), engaj_total != 0, segue != 0) %>%
+  ggplot(aes(x = segue, y = engaj_total)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_total), engaj_total != 0, seguidores != 0) %>%
+  ggplot(aes(x = seguidores, y = engaj_total)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_total), engaj_total != 0, n_proprio != 0) %>%
+  ggplot(aes(x = n_proprio, y = engaj_total)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_total), engaj_total != 0, n_retweet != 0) %>%
+  ggplot(aes(x = n_retweet, y = engaj_total)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+```
+
+Após verificar como as características se comportam quando relacionadas ao engajamento total, foi possível identificar quais precisam de transformação e qual transformação elas precisam.
+
+```{r}
+
+atividade1 = atividade %>% 
+  filter(!is.na(engaj_total)) %>% 
+  filter(engaj_total != 0, segue != 0, seguidores != 0, n_proprio != 0, n_retweet != 0) %>% 
+  mutate(engaj_total_log = log10(engaj_total),
+         segue_log = log10(segue),
+         seguidores_log = log10(seguidores),
+         n_proprio_log = log10(n_proprio),
+         n_retweet_log = log10(n_retweet))
+
+```
+
+```{r}
+
+modelo1 = lm(engaj_total_log ~ casa + segue_log + seguidores_log + n_proprio_log + n_retweet_log,
+             data = atividade1)
+
+tidy(modelo1)
+
+```
+
+```{r}
+para_plotar_modelo1 = atividade1 %>% 
+  data_grid(segue_log = seq_range(segue_log, 10), # Crie um vetor de 10 valores no range
+            seguidores_log = mean(seguidores_log), # todos na média
+            n_proprio_log = mean(n_proprio_log), # todos na média
+            n_retweet_log = mean(n_retweet_log), # todos na média
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo1)
+
+glimpse(para_plotar_modelo1)
+```
+
+Visualizando log log: 
+
+```{r}
+ggplot(data = atividade1, aes(x = segue_log)) + 
+  geom_point(aes(y = engaj_total_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+```
+
+```{r}
+ggplot(data = atividade, aes(x = 10**segue_log)) + 
+  # geom_point(aes(y = 10**seguidores_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = 10**pred), color = "orange", size = 1.5)
+```
