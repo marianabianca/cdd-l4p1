@@ -1,5 +1,6 @@
 ---
-title: "REPLACE ME"
+title: "Regresão com parlamentares Twitter"
+author: "Mariana Marques dos Santos Dela Bianca"
 output:
     html_document:
     df_print: paged
@@ -9,6 +10,8 @@ theme: sandstone
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(ggbeeswarm)
+library(broom)
+library(modelr)
 source(here::here("code/lib.R"))
 theme_set(theme_bw())
 ```
@@ -16,6 +19,8 @@ theme_set(theme_bw())
 ```{r read}
 atividade = read_projectdata()
 ```
+
+# Analisando a distribuição das variáveis com o engajamento total
 
 ```{r}
 
@@ -55,14 +60,57 @@ atividade %>%
 
 ```
 
-Após verificar como as características se comportam quando relacionadas ao engajamento total, foi possível identificar quais precisam de transformação e qual transformação elas precisam.
+# Analisando a distribuição das variáveis com o engajamento mediano
 
 ```{r}
 
-atividade1 = atividade %>% 
-  filter(!is.na(engaj_total)) %>% 
-  filter(engaj_total != 0, segue != 0, seguidores != 0, n_proprio != 0, n_retweet != 0) %>% 
+atividade %>% 
+  filter(!is.na(engaj_mediano), engaj_mediano != 0) %>%
+  ggplot(aes(x = casa, y = engaj_mediano)) +
+  geom_quasirandom() +
+  scale_y_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_mediano), engaj_mediano != 0, segue != 0) %>%
+  ggplot(aes(x = segue, y = engaj_mediano)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_mediano), engaj_mediano != 0, seguidores != 0) %>%
+  ggplot(aes(x = seguidores, y = engaj_mediano)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_mediano), engaj_mediano != 0, n_proprio != 0) %>%
+  ggplot(aes(x = n_proprio, y = engaj_mediano)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+atividade %>% 
+  filter(!is.na(engaj_mediano), engaj_mediano != 0, n_retweet != 0) %>%
+  ggplot(aes(x = n_retweet, y = engaj_mediano)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_log10()
+
+```
+
+Após verificar como as características se comportam quando relacionadas ao engajamento total e ao mediano, foi possível identificar que todas as variáveis, menos *casa*, precisam ser transformadas usando log10
+
+# Transformando as variáveis
+
+```{r}
+
+atividade = atividade %>% 
+  filter(!is.na(engaj_total), !is.na(engaj_mediano)) %>% 
+  filter(engaj_total != 0, engaj_mediano != 0, segue != 0, seguidores != 0, n_proprio != 0, n_retweet != 0) %>% 
   mutate(engaj_total_log = log10(engaj_total),
+         engaj_mediano_log = log10(engaj_mediano),
          segue_log = log10(segue),
          seguidores_log = log10(seguidores),
          n_proprio_log = log10(n_proprio),
@@ -70,38 +118,241 @@ atividade1 = atividade %>%
 
 ```
 
+
+***
+
+# Criando modelo da questão 1
+## Relação entre características e engajamento total
+
 ```{r}
 
 modelo1 = lm(engaj_total_log ~ casa + segue_log + seguidores_log + n_proprio_log + n_retweet_log,
-             data = atividade1)
+             data = atividade)
 
 tidy(modelo1)
-
+glance(modelo1)
 ```
 
+## Verificando como a característica *segue* tem relação com a predição
+
 ```{r}
-para_plotar_modelo1 = atividade1 %>% 
-  data_grid(segue_log = seq_range(segue_log, 10), # Crie um vetor de 10 valores no range
-            seguidores_log = mean(seguidores_log), # todos na média
-            n_proprio_log = mean(n_proprio_log), # todos na média
-            n_retweet_log = mean(n_retweet_log), # todos na média
+para_plotar_modelo1 = atividade %>% 
+  data_grid(segue_log = seq_range(segue_log, 10),
+            seguidores_log = mean(seguidores_log),
+            n_proprio_log = mean(n_proprio_log),
+            n_retweet_log = mean(n_retweet_log),
             casa = c("senado", "câmara")) %>% 
   add_predictions(modelo1)
 
 glimpse(para_plotar_modelo1)
-```
 
-Visualizando log log: 
-
-```{r}
-ggplot(data = atividade1, aes(x = segue_log)) + 
+ggplot(data = atividade, aes(x = segue_log)) + 
   geom_point(aes(y = engaj_total_log)) + 
   geom_line(data = para_plotar_modelo1, aes(y = pred), color = "orange", size = 1.5) +
   facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**segue_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
 ```
 
+Podemos ver que a variável se relaciona de uma forma decrescente em relação à predição 
+
+## Verificando como a característica *seguidores* tem relação com a predição
+
 ```{r}
-ggplot(data = atividade, aes(x = 10**segue_log)) + 
-  # geom_point(aes(y = 10**seguidores_log)) + 
-  geom_line(data = para_plotar_modelo1, aes(y = 10**pred), color = "orange", size = 1.5)
+para_plotar_modelo1 = atividade %>% 
+  data_grid(segue_log = mean(segue_log),
+            seguidores_log = seq_range(seguidores_log, 10),
+            n_proprio_log = mean(n_proprio_log),
+            n_retweet_log = mean(n_retweet_log),
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo1)
+
+glimpse(para_plotar_modelo1)
+
+ggplot(data = atividade, aes(x = seguidores_log)) + 
+  geom_point(aes(y = engaj_total_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**seguidores_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
 ```
+
+Podemos ver que a variável se relaciona de uma forma crescente em relação à predição 
+
+## Verificando como a característica *n_proprio* tem relação com a predição
+
+```{r}
+para_plotar_modelo1 = atividade %>% 
+  data_grid(segue_log = mean(segue_log),
+            seguidores_log = mean(seguidores_log),
+            n_proprio_log = seq_range(n_proprio_log, 10),
+            n_retweet_log = mean(n_retweet_log),
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo1)
+
+glimpse(para_plotar_modelo1)
+
+ggplot(data = atividade, aes(x = n_proprio_log)) + 
+  geom_point(aes(y = engaj_total_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**n_proprio_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+```
+
+Podemos ver que a variável se relaciona de uma forma decrescente em relação à predição 
+
+## Verificando como a característica *n_retweets* tem relação com a predição
+
+```{r}
+para_plotar_modelo1 = atividade %>% 
+  data_grid(segue_log = mean(segue_log),
+            seguidores_log = mean(seguidores_log),
+            n_proprio_log = mean(n_proprio_log),
+            n_retweet_log = seq_range(n_retweet_log, 10),
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo1)
+
+glimpse(para_plotar_modelo1)
+
+ggplot(data = atividade, aes(x = n_retweet_log)) + 
+  geom_point(aes(y = engaj_total_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**n_retweet_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+```
+
+Podemos ver que a variável se relaciona de uma forma decrescente em relação à predição 
+
+## Formato da regressão
+
+Regressão linear múltipla foi utilizada para analisar a associação entre engajamento total e as características especificadas no relatório. Os resultados da regressão indicam que um modelo no formato log10(engaj_total) = 0.53 + senado.(-0.05) + log10(segue).(-0.28) + log10(seguidores).(0.57) + log10(n_proprio).(0.52) + log10(n_retweets).(0.88) explicam 70,87% da variância da variável de resposta (R2 = 0,71). 
+
+
+***
+
+
+# Criando modelo da questão 2
+## Relação entre características e engajamento total
+
+```{r}
+
+modelo2 = lm(engaj_mediano_log ~ casa + segue_log + seguidores_log + n_proprio_log + n_retweet_log,
+             data = atividade)
+
+tidy(modelo2)
+glance(modelo2)
+```
+
+## Verificando como a característica *segue* tem relação com a predição
+
+```{r}
+para_plotar_modelo2 = atividade %>% 
+  data_grid(segue_log = seq_range(segue_log, 10),
+            seguidores_log = mean(seguidores_log),
+            n_proprio_log = mean(n_proprio_log),
+            n_retweet_log = mean(n_retweet_log),
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo2)
+
+glimpse(para_plotar_modelo2)
+
+ggplot(data = atividade, aes(x = segue_log)) + 
+  geom_point(aes(y = engaj_mediano_log)) + 
+  geom_line(data = para_plotar_modelo2, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**segue_log)) + 
+  geom_line(data = para_plotar_modelo2, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+```
+
+Podemos ver que a variável se relaciona de uma forma decrescente em relação à predição 
+
+## Verificando como a característica *seguidores* tem relação com a predição
+
+```{r}
+para_plotar_modelo2 = atividade %>% 
+  data_grid(segue_log = mean(segue_log),
+            seguidores_log = seq_range(seguidores_log, 10),
+            n_proprio_log = mean(n_proprio_log),
+            n_retweet_log = mean(n_retweet_log),
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo2)
+
+glimpse(para_plotar_modelo2)
+
+ggplot(data = atividade, aes(x = seguidores_log)) + 
+  geom_point(aes(y = engaj_mediano_log)) + 
+  geom_line(data = para_plotar_modelo2, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**seguidores_log)) + 
+  geom_line(data = para_plotar_modelo2, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+```
+
+Podemos ver que a variável se relaciona de uma forma crescente em relação à predição 
+
+## Verificando como a característica *n_proprio* tem relação com a predição
+
+```{r}
+para_plotar_modelo2 = atividade %>% 
+  data_grid(segue_log = mean(segue_log),
+            seguidores_log = mean(seguidores_log),
+            n_proprio_log = seq_range(n_proprio_log, 10),
+            n_retweet_log = mean(n_retweet_log),
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo2)
+
+glimpse(para_plotar_modelo2)
+
+ggplot(data = atividade, aes(x = n_proprio_log)) + 
+  geom_point(aes(y = engaj_mediano_log)) + 
+  geom_line(data = para_plotar_modelo2, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**n_proprio_log)) + 
+  geom_line(data = para_plotar_modelo2, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+```
+
+Podemos ver que a variável se relaciona de uma forma decrescente em relação à predição 
+
+## Verificando como a característica *n_retweets* tem relação com a predição
+
+```{r}
+para_plotar_modelo2 = atividade %>% 
+  data_grid(segue_log = mean(segue_log),
+            seguidores_log = mean(seguidores_log),
+            n_proprio_log = mean(n_proprio_log),
+            n_retweet_log = seq_range(n_retweet_log, 10),
+            casa = c("senado", "câmara")) %>% 
+  add_predictions(modelo2)
+
+glimpse(para_plotar_modelo2)
+
+ggplot(data = atividade, aes(x = n_retweet_log)) + 
+  geom_point(aes(y = engaj_mediano_log)) + 
+  geom_line(data = para_plotar_modelo1, aes(y = pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+
+ggplot(data = atividade, aes(x = 10**n_retweet_log)) + 
+  geom_line(data = para_plotar_modelo2, aes(y = 10**pred), color = "orange", size = 1.5) +
+  facet_wrap(~casa)
+```
+
+Podemos ver que a variável se relaciona de uma forma crescente em relação à predição 
+
+## Formato da regressão
+
+Regressão linear múltipla foi utilizada para analisar a associação entre engajamento total e as características especificadas no relatório. Os resultados da regressão indicam que um modelo no formato log10(engaj_total) = _-0.78) + senado.(-0.10) + log10(segue).(-0.34) + log10(seguidores).(0.74) + log10(n_proprio).(-0.15) + log10(n_retweets).(0.28) explicam 56,53% da variância da variável de resposta (R2 = 0,57). 
